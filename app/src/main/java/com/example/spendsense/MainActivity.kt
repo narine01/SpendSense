@@ -54,13 +54,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-data class  Expense (
-    val id:Int,
-    val title:String,
-    val amount: Double,
-    val category: String,
-    val date: LocalDate
-)
 //@Composable
 //fun Greeting(name: String, modifier: Modifier = Modifier) {
 //    Text(
