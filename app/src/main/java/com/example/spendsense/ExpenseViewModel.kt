@@ -19,13 +19,13 @@ class ExpenseViewModel(app: Application) : AndroidViewModel(app) {
     val expenses: StateFlow<List<Expense>> = dao.getAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun addExpense(title: String, amount: Double, category: String) {
+    fun saveExpense(id: Int, title: String, amount: Double, category: String, date: LocalDate) {
         viewModelScope.launch {
-            dao.insert(
-                Expense(title = title, amount = amount, category = category, date = LocalDate.now())
-            )
+            dao.upsert(Expense(id, title, amount, category, date))
         }
     }
+
+    suspend fun getExpense(id: Int): Expense? = dao.getById(id)
 
     fun deleteExpense(id: Int) {
         viewModelScope.launch { dao.deleteById(id) }
