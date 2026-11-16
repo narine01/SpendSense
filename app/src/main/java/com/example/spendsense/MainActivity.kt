@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
@@ -111,6 +112,11 @@ fun SpendSenseApp(viewModel: ExpenseViewModel = viewModel()) {
                 SummaryScreen(expenses, Modifier.padding(padding))
             }
         }
+        composable("chat") {
+            Scaffold(bottomBar = { BottomBar(current, navController) }) { padding ->
+                ChatScreen(viewModel, Modifier.padding(padding))
+            }
+        }
         composable(
             route = "edit/{expenseId}",
             arguments = listOf(navArgument("expenseId") { type = NavType.IntType })
@@ -135,6 +141,12 @@ fun BottomBar(current: String?, navController: NavHostController) {
             onClick = { navController.navigate("summary") { launchSingleTop = true } },
             icon = { Icon(Icons.Default.Info, contentDescription = null) },
             label = { Text("Summary") }
+        )
+        NavigationBarItem(
+            selected = current == "chat",
+            onClick = { navController.navigate("chat") { launchSingleTop = true } },
+            icon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null) },
+            label = { Text("Ask AI") }
         )
     }
 }

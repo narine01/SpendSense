@@ -2,6 +2,7 @@ package com.example.spendsense
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.Room
@@ -10,7 +11,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,6 +28,8 @@ sealed interface ScanState {
     data class Success(val bill: ScannedBill) : ScanState
     data class Error(val message: String) : ScanState
 }
+
+data class ChatMessage(val text: String, val fromUser: Boolean)
 
 class ExpenseViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -47,6 +52,8 @@ class ExpenseViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { dao.deleteById(id) }
     }
 
+    // ---- Bill scan ----
+
     private val _scanState = MutableStateFlow<ScanState>(ScanState.Idle)
     val scanState: StateFlow<ScanState> = _scanState.asStateFlow()
 
@@ -62,7 +69,7 @@ class ExpenseViewModel(app: Application) : AndroidViewModel(app) {
                 val part = createFormData("file", "bill", bytes.toRequestBody(mime.toMediaType()))
                 _scanState.value = ScanState.Success(Backend.api.scanBill(part))
             } catch (e: Exception) {
-                android.util.Log.e("SpendSense", "Scan failed", e)
+                Log.e("SpendSense", "Scan failed", e)
                 _scanState.value = ScanState.Error("Couldn't read that bill. Try again or enter it manually.")
             }
         }
@@ -70,5 +77,39 @@ class ExpenseViewModel(app: Application) : AndroidViewModel(app) {
 
     fun resetScan() {
         _scanState.value = ScanState.Idle
+    }
+
+    // ---- Ask your spending ----
+
+    private val _chat = MutableStateFlow<List<ChatMessage>>(emptyList())
+    val chat: StateFlow<List<ChatMessage>> = _chat.asStateFlow()
+
+    private val _asking = MutableStateFlow(false)
+    val asking: StateFlow<Boolean> = _asking.asStateFlow()
+
+    fun ask(question: String) {
+        if (question.isBlank() || _asking.value) return
+        viewModelScope.launch {
+            _chat.update { it + ChatMessage(question.trim(), fromUser = true) }
+            _asking.value = true
+            try {
+                // Read straight from the database. `expenses.value` can still be the empty
+                // initial value if no screen is collecting it right now.
+                val rows = dao.getAll().first().take(300).map {
+                    ExpenseDto(it.title, it.amount, it.category, it.date.toString())
+                }
+                val reply = Backend.api.ask(
+                    AskRequest(question.trim(), LocalDate.now().toString(), rows)
+                )
+                _chat.update { it + ChatMessage(reply.answer, fromUser = false) }
+            } catch (e: Exception) {
+                Log.e("SpendSense", "Ask failed", e)
+                _chat.update {
+                    it + ChatMessage("Sorry, I couldn't answer that right now. Please try again.", fromUser = false)
+                }
+            } finally {
+                _asking.value = false
+            }
+        }
     }
 }
