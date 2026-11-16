@@ -69,8 +69,12 @@ class ExpenseViewModel(app: Application) : AndroidViewModel(app) {
                 val part = createFormData("file", "bill", bytes.toRequestBody(mime.toMediaType()))
                 _scanState.value = ScanState.Success(Backend.api.scanBill(part))
             } catch (e: Exception) {
-                Log.e("SpendSense", "Scan failed", e)
-                _scanState.value = ScanState.Error("Couldn't read that bill. Try again or enter it manually.")
+                Log.e("SpendSense", "scan failed", e)
+                val message = if (e is retrofit2.HttpException && e.code() == 429)
+                    "The AI is busy or has hit its daily limit. Please try again later."
+                else
+                    "Sorry, I couldn't answer that right now. Please try again."
+                _chat.update { it + ChatMessage(message, fromUser = false) }
             }
         }
     }
@@ -104,9 +108,11 @@ class ExpenseViewModel(app: Application) : AndroidViewModel(app) {
                 _chat.update { it + ChatMessage(reply.answer, fromUser = false) }
             } catch (e: Exception) {
                 Log.e("SpendSense", "Ask failed", e)
-                _chat.update {
-                    it + ChatMessage("Sorry, I couldn't answer that right now. Please try again.", fromUser = false)
-                }
+                val message = if (e is retrofit2.HttpException && e.code() == 429)
+                    "The AI is busy or has hit its daily limit. Please try again later."
+                else
+                    "Sorry, I couldn't answer that right now. Please try again."
+                _chat.update { it + ChatMessage(message, fromUser = false) }
             } finally {
                 _asking.value = false
             }

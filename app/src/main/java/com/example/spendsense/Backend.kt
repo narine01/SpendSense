@@ -44,13 +44,20 @@ interface BackendApi {
 object Backend {
     // Emulator with `adb reverse tcp:8000 tcp:8000`: 127.0.0.1 reaches your Mac.
     // Before publishing: your deployed https:// URL.
-    private const val BASE_URL = "http://127.0.0.1:8000/"
+    private const val BASE_URL = "https://spendsense-backend-hgtl.onrender.com/"
 
     val api: BackendApi by lazy {
         val client = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header("X-App-Token", BuildConfig.APP_TOKEN)
+                        .build()
+                )
+            }
             .build()
         Retrofit.Builder()
             .baseUrl(BASE_URL)

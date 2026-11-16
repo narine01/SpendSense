@@ -1,9 +1,12 @@
+import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     id("com.google.devtools.ksp") version "2.2.10-2.0.2"
 }
-
+val localProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
 android {
     namespace = "com.example.spendsense"
     compileSdk {
@@ -18,6 +21,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "APP_TOKEN", "\"${localProps.getProperty("APP_TOKEN", "")}\"")
     }
 
     buildTypes {
@@ -34,6 +38,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
