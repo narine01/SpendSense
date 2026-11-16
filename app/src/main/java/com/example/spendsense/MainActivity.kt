@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -52,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -180,14 +183,46 @@ fun ExpenseListScreen(
     onClick: (Expense) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(modifier) {
-        items(expenses, key = { it.id }) { expense ->
-            ExpenseRow(
-                expense,
-                onClick = { onClick(expense) },
-                onDelete = { onDelete(expense.id) }
+    var pendingDelete by remember { mutableStateOf<Expense?>(null) }
+
+    if (expenses.isEmpty()) {
+        Box(
+            modifier.fillMaxSize().padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "No expenses yet.\nTap + to add one, or scan a bill.",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center
             )
         }
+    } else {
+        LazyColumn(modifier) {
+            items(expenses, key = { it.id }) { expense ->
+                ExpenseRow(
+                    expense,
+                    onClick = { onClick(expense) },
+                    onDelete = { pendingDelete = expense }
+                )
+            }
+        }
+    }
+
+    pendingDelete?.let { expense ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete expense?") },
+            text = { Text("\"${expense.title}\" (₹${"%.2f".format(expense.amount)}) will be removed.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(expense.id)
+                    pendingDelete = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+            }
+        )
     }
 }
 
