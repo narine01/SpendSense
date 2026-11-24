@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -36,8 +37,12 @@ fun ChatScreen(viewModel: ExpenseViewModel, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
 
     LaunchedEffect(messages.size, asking) {
-        val count = messages.size + if (asking) 1 else 0
-        if (count > 0) listState.animateScrollToItem(count - 1)
+        if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex)
+    }
+    // Keep following the text while the answer grows.
+    val lastLength = messages.lastOrNull()?.text?.length ?: 0
+    LaunchedEffect(lastLength) {
+        if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex)
     }
 
     Column(modifier.fillMaxSize().imePadding()) {
@@ -56,9 +61,6 @@ fun ChatScreen(viewModel: ExpenseViewModel, modifier: Modifier = Modifier) {
                 }
             }
             items(messages) { ChatBubble(it) }
-            if (asking) {
-                item { Text("Thinking…", style = MaterialTheme.typography.bodySmall) }
-            }
         }
         Text(
             "Your expenses are sent to the server to answer questions.",
@@ -76,13 +78,17 @@ fun ChatScreen(viewModel: ExpenseViewModel, modifier: Modifier = Modifier) {
                 placeholder = { Text("Ask about your spending") },
                 modifier = Modifier.weight(1f)
             )
-            Button(
-                enabled = input.isNotBlank() && !asking,
-                onClick = {
-                    viewModel.ask(input)
-                    input = ""
-                }
-            ) { Text("Send") }
+            if (asking) {
+                OutlinedButton(onClick = viewModel::stopAsking) { Text("Stop") }
+            } else {
+                Button(
+                    enabled = input.isNotBlank(),
+                    onClick = {
+                        viewModel.ask(input)
+                        input = ""
+                    }
+                ) { Text("Send") }
+            }
         }
     }
 }
@@ -100,7 +106,7 @@ fun ChatBubble(message: ChatMessage) {
             modifier = Modifier.widthIn(max = 300.dp)
         ) {
             Text(
-                message.text,
+                message.text.ifEmpty { "Thinking…" },
                 modifier = Modifier.padding(12.dp),
                 color = if (message.fromUser) MaterialTheme.colorScheme.onPrimary
                 else MaterialTheme.colorScheme.onSurfaceVariant

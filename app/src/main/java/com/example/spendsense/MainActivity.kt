@@ -42,10 +42,12 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,7 +59,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -66,12 +68,14 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.spendsense.ui.theme.SpendSenseTheme
+import dagger.hilt.android.AndroidEntryPoint
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,7 +89,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun SpendSenseApp(viewModel: ExpenseViewModel = viewModel()) {
+fun SpendSenseApp(viewModel: ExpenseViewModel = hiltViewModel()) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
@@ -235,10 +239,16 @@ fun ExpenseFormScreen(expenseId: Int, viewModel: ExpenseViewModel, onDone: () ->
     var category by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(LocalDate.now()) }
     var showPicker by remember { mutableStateOf(false) }
+    var showCamera by remember { mutableStateOf(false) }
 
     val scan by viewModel.scanState.collectAsStateWithLifecycle()
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::scanBill)
+    }
+
+    // Leaving the form cancels any scan still running, so "Reading bill..." can never get stuck.
+    DisposableEffect(Unit) {
+        onDispose { viewModel.cancelScan() }
     }
 
     LaunchedEffect(expenseId) {
@@ -260,13 +270,29 @@ fun ExpenseFormScreen(expenseId: Int, viewModel: ExpenseViewModel, onDone: () ->
             title = s.bill.merchant
             amount = s.bill.amount.toString()
             category = s.bill.category
-            s.bill.date.takeIf { it.isNotBlank() }?.let { runCatching { date = LocalDate.parse(it) } }
+            // Ignore a missing, invalid or future date from the AI: keep the current date.
+            s.bill.date.takeIf { it.isNotBlank() }
+                ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                ?.takeIf { !it.isAfter(LocalDate.now()) }
+                ?.let { date = it }
             viewModel.resetScan()
         }
     }
 
     val amountValue = amount.toDoubleOrNull()
     val isAmountError = amount.isNotEmpty() && amountValue == null
+    val isDateValid = !date.isAfter(LocalDate.now())
+
+    if (showCamera) {
+        CameraCapture(
+            onCaptured = { uri ->
+                showCamera = false
+                viewModel.scanBill(uri)
+            },
+            onClose = { showCamera = false }
+        )
+        return
+    }
 
     Scaffold { padding ->
         Column(
@@ -283,6 +309,14 @@ fun ExpenseFormScreen(expenseId: Int, viewModel: ExpenseViewModel, onDone: () ->
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(if (scan is ScanState.Loading) "Reading bill…" else "Scan a bill (photo or PDF)")
+            }
+            OutlinedButton(
+                onClick = { showCamera = true },
+                enabled = scan !is ScanState.Loading,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Take a photo of a bill") }
+            if (scan is ScanState.Loading) {
+                TextButton(onClick = viewModel::cancelScan) { Text("Cancel scan") }
             }
             (scan as? ScanState.Error)?.let {
                 Text(it.message, color = MaterialTheme.colorScheme.error)
@@ -311,7 +345,7 @@ fun ExpenseFormScreen(expenseId: Int, viewModel: ExpenseViewModel, onDone: () ->
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    enabled = title.isNotBlank() && amountValue != null,
+                    enabled = title.isNotBlank() && amountValue != null && isDateValid,
                     onClick = {
                         viewModel.saveExpense(
                             id = existing?.id ?: 0,
@@ -329,8 +363,13 @@ fun ExpenseFormScreen(expenseId: Int, viewModel: ExpenseViewModel, onDone: () ->
     }
 
     if (showPicker) {
+        val todayUtcMillis = LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         val pickerState = rememberDatePickerState(
-            initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= todayUtcMillis
+                override fun isSelectableYear(year: Int) = year <= LocalDate.now().year
+            }
         )
         DatePickerDialog(
             onDismissRequest = { showPicker = false },

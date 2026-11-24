@@ -1,0 +1,5 @@
+# Gson fills these classes by field name via reflection. With R8 full mode, renamed or
+# removed fields would silently break the network calls in the release build.
+-keep class com.example.spendsense.ScannedBill { *; }
+-keep class com.example.spendsense.ExpenseDto { *; }
+-keep class com.example.spendsense.AskRequest { *; }

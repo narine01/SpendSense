@@ -1,14 +1,13 @@
 package com.example.spendsense
 
+import com.google.gson.JsonParser
 import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.Part
-import java.util.concurrent.TimeUnit
+import retrofit2.http.Streaming
 
 data class ScannedBill(
     val merchant: String,
@@ -30,40 +29,36 @@ data class AskRequest(
     val expenses: List<ExpenseDto>
 )
 
-data class AskResponse(val answer: String)
-
 interface BackendApi {
     @Multipart
     @POST("scan-bill")
     suspend fun scanBill(@Part file: MultipartBody.Part): ScannedBill
 
-    @POST("ask")
-    suspend fun ask(@Body body: AskRequest): AskResponse
+    // @Streaming: do not buffer the whole body, hand it over as it arrives.
+    @Streaming
+    @POST("ask/stream")
+    suspend fun askStream(@Body body: AskRequest): ResponseBody
 }
 
-object Backend {
-    // Emulator with `adb reverse tcp:8000 tcp:8000`: 127.0.0.1 reaches your Mac.
-    // Before publishing: your deployed https:// URL.
-    private const val BASE_URL = "https://spendsense-backend-hgtl.onrender.com/"
+/** One line of the server's newline-delimited JSON stream. */
+sealed interface StreamEvent {
+    data class Delta(val text: String) : StreamEvent
+    data class Error(val message: String) : StreamEvent
+    data object Done : StreamEvent
+}
 
-    val api: BackendApi by lazy {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(90, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
-            .addInterceptor { chain ->
-                chain.proceed(
-                    chain.request().newBuilder()
-                        .header("X-App-Token", BuildConfig.APP_TOKEN)
-                        .build()
-                )
-            }
-            .build()
-        Retrofit.Builder()
-            .baseUrl(BASE_URL)
-            .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(BackendApi::class.java)
+/** Parses one NDJSON line. Returns null for blank or malformed lines (they are skipped). */
+fun parseStreamLine(line: String): StreamEvent? {
+    if (line.isBlank()) return null
+    return try {
+        val obj = JsonParser.parseString(line).asJsonObject
+        when {
+            obj.has("delta") -> StreamEvent.Delta(obj.get("delta").asString)
+            obj.has("error") -> StreamEvent.Error(obj.get("error").asString)
+            obj.has("done") -> StreamEvent.Done
+            else -> null
+        }
+    } catch (e: Exception) {
+        null
     }
 }
