@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -31,6 +32,28 @@ data class ChatMessage(val text: String, val fromUser: Boolean)
 class ExpenseViewModel @Inject constructor(
     private val repository: ExpenseRepository
 ) : ViewModel() {
+
+    init {
+        if (BuildConfig.DEBUG) {
+            viewModelScope.launch {
+                val existingTitles = repository.observeAll().first().map { it.title }.toSet()
+                val today = LocalDate.now()
+                listOf(
+                        Expense(title = "Coffee & breakfast", amount = 420.0, category = "Food", date = today.minusDays(1)),
+                        Expense(title = "Metro card", amount = 600.0, category = "Transport", date = today.minusDays(2)),
+                        Expense(title = "Weekly groceries", amount = 2385.0, category = "Food", date = today.minusDays(3)),
+                        Expense(title = "Internet bill", amount = 999.0, category = "Utilities", date = today.minusDays(5)),
+                        Expense(title = "Lunch with team", amount = 1240.0, category = "Food", date = today.minusDays(7)),
+                        Expense(title = "Bookstore", amount = 780.0, category = "Shopping", date = today.minusDays(10)),
+                        Expense(title = "Fuel", amount = 2100.0, category = "Transport", date = today.minusDays(12)),
+                        Expense(title = "Music subscription", amount = 149.0, category = "Subscriptions", date = today.minusDays(16)),
+                        Expense(title = "Weekend movie", amount = 560.0, category = "Entertainment", date = today.minusDays(18)),
+                        Expense(title = "Monthly rent", amount = 18000.0, category = "Housing", date = today.minusDays(20))
+                    ).filterNot { it.title in existingTitles }
+                    .forEach { repository.save(it) }
+            }
+        }
+    }
 
     val expenses: StateFlow<List<Expense>> = repository.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
