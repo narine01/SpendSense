@@ -4,8 +4,9 @@ import android.content.Context
 import androidx.room.Room
 import com.example.spendsense.AppDatabase
 import com.example.spendsense.BackendApi
-import com.example.spendsense.BuildConfig
 import com.example.spendsense.ExpenseDao
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.appcheck.FirebaseAppCheck
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -41,9 +42,14 @@ object AppModule {
         .writeTimeout(60, TimeUnit.SECONDS)
         .callTimeout(120, TimeUnit.SECONDS) // hard ceiling for one whole call, streams included
         .addInterceptor { chain ->
+            val appCheckToken = try {
+                Tasks.await(FirebaseAppCheck.getInstance().getAppCheckToken(false)).token
+            } catch (error: Exception) {
+                throw java.io.IOException("Unable to obtain Firebase App Check token", error)
+            }
             chain.proceed(
                 chain.request().newBuilder()
-                    .header("X-App-Token", BuildConfig.APP_TOKEN)
+                    .header("X-Firebase-AppCheck", appCheckToken)
                     .build()
             )
         }

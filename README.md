@@ -18,7 +18,7 @@ An Android expense tracker with two AI features: **scan a bill** (photo or PDF) 
 flowchart LR
     UI["Compose UI"] --> VM["ViewModel (StateFlow)"]
     VM --> DB[("Room database")]
-    VM -->|"Retrofit + app token"| API["FastAPI backend (Render)"]
+    VM -->|"Retrofit + Firebase App Check"| API["FastAPI backend (Render)"]
     API -->|"API key kept server-side"| AI["Gemini API"]
 ```
 
@@ -39,7 +39,7 @@ flowchart LR
 - **LLM arithmetic can be wrong.** The chat's totals come from the model reading a list. They are usually right, but the Summary tab is the source of truth. A stronger design would let the model request a calculation that the app runs itself (tool calling).
 - **Free-tier AI quota is small** (about 20 requests per day on the free Gemini tier when I built this), so heavy use will hit a limit.
 - **Cold starts.** The backend runs on a free Render instance that sleeps when idle, so the first request after a pause can take up to a minute.
-- **The app token is a speed bump, not strong security.** A token inside an APK can be extracted. It stops casual abuse, together with server-side rate limiting. Production-grade protection would use Firebase App Check or Play Integrity.
+- **The public demo API uses Firebase App Check.** The Android app obtains Play Integrity-backed App Check tokens, and the backend validates them before invoking AI endpoints. Per-IP rate limits add a second layer.
 - **No SMS reading.** I chose not to read bank SMS, because Google Play restricts the SMS permissions for this kind of app.
 ## Privacy
 
@@ -53,7 +53,7 @@ Kotlin · Jetpack Compose · Room · Navigation Compose · Retrofit/OkHttp · Co
 
 1. Clone this repo and open it in Android Studio.
 2. Deploy or run the backend: [spendsense-backend](https://github.com/narine01/spendsense-backend)
-3. Generate your own random token (for example `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`). Set it as `APP_TOKEN` in your backend's environment, and put the same value in the app's `local.properties` (git-ignored): `APP_TOKEN=<your own token>`. Never commit a real token.
+3. Register the Android app with Firebase App Check and configure the backend's Firebase Admin credentials and project IDs in Render. See the [Firebase App Check documentation](https://firebase.google.com/docs/app-check/custom-resource-backend).
 4. Set `BASE_URL` in `Backend.kt` to your backend's URL.
 5. Run the app.
 ## Tests
@@ -74,4 +74,3 @@ Unit tests cover the monthly summary logic: empty data, month filtering, groupin
 ## Author
 
 **Laxmy Narayan** · [LinkedIn](https://linkedin.com/in/laxmy-narayan)
- 
